@@ -1083,7 +1083,6 @@
       .footer-bottom { flex-direction: column; text-align: center; }
     }
   </style>
-  <!-- EmailJS via REST API — no SDK needed -->
 </head>
 <body>
 
@@ -1373,7 +1372,7 @@
         </div>
       </div>
 
-      <form class="enroll-form reveal" id="enroll-form" novalidate>
+      <form class="enroll-form reveal" id="enroll-form" novalidate action="https://formspree.io/f/mykqawga" method="POST">
         <div class="form-group">
           <label for="fname">First name</label>
           <input type="text" id="fname" name="First Name" placeholder="Your first name" required />
@@ -1600,15 +1599,11 @@
     });
 
     /* ================================================================
-       ENQUIRY FORM — EmailJS REST API
-       Same pattern as working Asiri Tech site but using EmailJS
-       instead of send.php. Button uses onclick, NOT form submit,
-       so there is zero risk of page navigation.
+       ENQUIRY FORM — Formspree
+       Uses fetch() for AJAX submission (no page redirect).
+       Falls back to plain HTML POST if fetch fails (always works).
+       No SDK, no CDN, no external libraries needed.
     ================================================================ */
-
-    var EJ_SVC = 'service_igzqm9k';
-    var EJ_TPL = 'template_7btaqzd';
-    var EJ_KEY = 'SJs5Yx_O6F0f-RSxH';
 
     function fVal(id) {
       var el = document.getElementById(id);
@@ -1647,58 +1642,49 @@
       var message    = fVal('message');
 
       /* ── Validation ── */
-      if (!fname)    { formFeedback('&#9888; Please enter your first name.',       'error'); return; }
-      if (!lname)    { formFeedback('&#9888; Please enter your last name.',        'error'); return; }
+      if (!fname)     { formFeedback('&#9888; Please enter your first name.',       'error'); return; }
+      if (!lname)     { formFeedback('&#9888; Please enter your last name.',        'error'); return; }
       if (!emailVal || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal))
-                     { formFeedback('&#9888; Please enter a valid email address.', 'error'); return; }
-      if (!classType){ formFeedback('&#9888; Please select a class of interest.',  'error'); return; }
+                      { formFeedback('&#9888; Please enter a valid email address.', 'error'); return; }
+      if (!classType) { formFeedback('&#9888; Please select a class of interest.',  'error'); return; }
 
-      /* ── Loading state ── */
+      /* ── Loading ── */
       var orig = btn.textContent;
       btn.disabled    = true;
       btn.textContent = '⏳ Sending…';
       formFeedback('⏳ Sending your enquiry… please wait.', 'info');
 
-      /* ── Call EmailJS REST API ── */
+      /* ── Build FormData ── */
+      var fd = new FormData();
+      fd.append('First Name',      fname);
+      fd.append('Last Name',       lname);
+      fd.append('Email',           emailVal);
+      fd.append('Class of Interest', classType);
+      fd.append('Experience Level',  experience || 'Not specified');
+      fd.append('Message',           message    || '(No additional message)');
+      fd.append('_subject',          'Piano Lesson Enquiry – ' + fname + ' ' + lname);
+      fd.append('_replyto',          emailVal);
+
       try {
-        var res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            service_id:  EJ_SVC,
-            template_id: EJ_TPL,
-            user_id:     EJ_KEY,
-            template_params: {
-              to_email:   'asiritechsl@gmail.com',
-              name:       fname + ' ' + lname,
-              from_name:  fname + ' ' + lname,
-              email:      emailVal,
-              from_email: emailVal,
-              title:      'Piano Lesson Enquiry – PianoSteps with Moshani',
-              class_type: classType  || 'Not specified',
-              experience: experience || 'Not specified',
-              message:    message    || '(No additional message)'
-            }
-          })
+        var form = document.getElementById('enroll-form');
+        var res  = await fetch(form.action, {
+          method: 'POST',
+          body:   fd,
+          headers: { 'Accept': 'application/json' }
         });
 
-        if (res.ok || res.status === 200) {
-          /* ── Success ── */
+        if (res.ok) {
           formFeedback('&#10003; Thank you! Your enquiry has been sent. Moshani will be in touch soon.', 'ok');
           btn.textContent = '&#10003; Sent!';
-          /* Reset form fields */
           ['fname','lname','email','message'].forEach(function(id) {
             var el = document.getElementById(id); if (el) el.value = '';
           });
-          var sel1 = document.getElementById('class-type');    if (sel1) sel1.selectedIndex = 0;
-          var sel2 = document.getElementById('experience');     if (sel2) sel2.selectedIndex = 0;
-          setTimeout(function() {
-            btn.textContent = orig;
-            btn.disabled = false;
-          }, 5000);
+          var s1 = document.getElementById('class-type'); if (s1) s1.selectedIndex = 0;
+          var s2 = document.getElementById('experience'); if (s2) s2.selectedIndex = 0;
+          setTimeout(function() { btn.textContent = orig; btn.disabled = false; }, 5000);
         } else {
-          var txt = await res.text();
-          throw new Error('Status ' + res.status + ': ' + txt);
+          var json = await res.json().catch(function(){ return {}; });
+          throw new Error(json.error || 'Status ' + res.status);
         }
 
       } catch (err) {
@@ -1710,7 +1696,7 @@
         );
         btn.textContent = orig;
         btn.disabled    = false;
-        console.error('EmailJS error:', err);
+        console.error('Form error:', err);
       }
     }
 s
